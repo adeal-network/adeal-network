@@ -1,0 +1,151 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: adeal-postgres
+    environment:
+      POSTGRES_DB: adeal_network
+      POSTGRES_USER: adeal_user
+      POSTGRES_PASSWORD: adeal_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/prisma/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - adeal-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: adeal-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - adeal-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: adeal-backend
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://adeal_user:adeal_password@postgres:5432/adeal_network
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: development_jwt_secret
+      CORS_ORIGIN: http://localhost:3000
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - adeal-network
+    command: npm run dev
+
+  # User Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: adeal-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXT_PUBLIC_CHAIN_ID: 420
+      NEXT_PUBLIC_CONTRACT_ADDRESS: 0x0000000000000000000000000000000000000000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - adeal-network
+    command: npm run dev
+
+  # Advertiser Portal
+  advertiser-portal:
+    build:
+      context: ./advertiser-portal
+      dockerfile: Dockerfile.dev
+    container_name: adeal-advertiser-portal
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXT_PUBLIC_CHAIN_ID: 420
+      NEXT_PUBLIC_CONTRACT_ADDRESS: 0x0000000000000000000000000000000000000000
+    ports:
+      - "3002:3000"
+    volumes:
+      - ./advertiser-portal:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - adeal-network
+    command: npm run dev
+
+  # IPFS Node (for decentralized storage)
+  ipfs:
+    image: ipfs/kubo:latest
+    container_name: adeal-ipfs
+    ports:
+      - "4001:4001"
+      - "5001:5001"
+      - "8080:8080"
+    volumes:
+      - ipfs_data:/data/ipfs
+    networks:
+      - adeal-network
+    command: ipfs daemon --migrate=true --agent-version-suffix=docker
+
+  # Monitoring (Optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: adeal-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - adeal-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: adeal-grafana
+    ports:
+      - "3003:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - adeal-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  ipfs_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  adeal-network:
+    driver: bridge 
