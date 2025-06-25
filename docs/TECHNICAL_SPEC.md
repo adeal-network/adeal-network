@@ -85,7 +85,7 @@ The aDeal network consists of four primary components:
 
 #### Data Management Service
 - Manages mutable data streams (wishlists)
-- Integrates with decentralized storage solutions (IPFS, Ceramic Network)
+- Integrates with decentralized storage solutions (IPFS)
 - Handles data versioning and conflict resolution
 - Provides data privacy and access control mechanisms
 
